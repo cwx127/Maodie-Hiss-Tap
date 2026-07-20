@@ -24,6 +24,14 @@ const sampleElements = Object.freeze({
   ji: document.getElementById('sample-ji'),
   mi: document.getElementById('sample-mi'),
 });
+const sampleDataPromises = Object.freeze(Object.fromEntries(
+  Object.entries(sampleElements).map(([name, element]) => [
+    name,
+    fetch(element.src)
+      .then(response => response.ok ? response.arrayBuffer() : null)
+      .catch(() => null),
+  ])
+));
 
 let ctx = null;
 let master = null;
@@ -115,13 +123,12 @@ function initAudio() {
 
 function loadVoiceBuffers() {
   if (!ctx || voiceBufferPromise) return;
-  voiceBufferPromise = Promise.all(Object.entries(sampleElements).map(([name, element]) =>
-    fetch(element.currentSrc || element.src)
-      .then(response => {
-        if (!response.ok) throw new Error(`${name} 采样加载失败：${response.status}`);
-        return response.arrayBuffer();
+  voiceBufferPromise = Promise.all(Object.keys(sampleElements).map(name =>
+    sampleDataPromises[name]
+      .then(data => {
+        if (!data) throw new Error(`${name} 采样加载失败`);
+        return ctx.decodeAudioData(data.slice(0));
       })
-      .then(data => ctx.decodeAudioData(data))
       .then(buffer => { voiceBuffers[name] = buffer; })
   ))
     .then(() => { stage.dataset.audioEngine = 'web-audio'; })
@@ -673,6 +680,7 @@ function updateCat(dt, now) {
     hissPopVelocity *= Math.exp(-13 * dt);
     hissPopVelocity = Math.max(-10, Math.min(10, hissPopVelocity));
     hissPop += hissPopVelocity * dt;
+    hissPop = Math.max(-.12, Math.min(1.35, hissPop));
   }
   const holdTarget = pointers.size ? 1 : 0;
   jelly += (holdTarget - jelly) * (1 - Math.exp(-dt / (pointers.size ? .8 : .18)));
@@ -738,6 +746,13 @@ async function start() {
   }).catch(() => { /* 某些浏览器会延迟音频解锁，但视觉仍可运行 */ });
 }
 
+async function triggerKeyboardZone(zone) {
+  if (zone < 0 || zone >= zones.length) return;
+  if (!started) await start();
+  enqueueActivation(zone, `keyboard-${zone}`);
+  showControlsLater();
+}
+
 overlay.addEventListener('pointerdown', (event) => {
   event.preventDefault();
   start();
@@ -776,6 +791,13 @@ stage.addEventListener('pointermove', (event) => {
 
 window.addEventListener('pointerup', (event) => releasePointer(event, false));
 window.addEventListener('pointercancel', (event) => releasePointer(event, true));
+window.addEventListener('keydown', (event) => {
+  if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+  const zone = Number(event.key) - 1;
+  if (!Number.isInteger(zone) || zone < 0 || zone > 8) return;
+  event.preventDefault();
+  triggerKeyboardZone(zone);
+});
 window.addEventListener('blur', () => {
   for (const state of pointers.values()) if (state.repeatTimer) clearInterval(state.repeatTimer);
   pointers.clear();
