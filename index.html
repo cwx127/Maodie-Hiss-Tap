@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#f5f1ea">
-  <title>耄耋哈气 Tap</title>
-  <link rel="icon" href="assets/maodie-calm.png" type="image/png">
+  <title>耄耋哈基米 Tap</title>
+  <link rel="icon" href="assets/maodie-greenscreen-calm.png" type="image/png">
   <style>
     :root {
       --paper: #f5f1ea;
@@ -46,12 +46,9 @@
     }
     #cat-inner {
       position: relative;
-      width: min(72vmin, 700px);
+      width: min(54vmin, 540px);
       aspect-ratio: 1;
-      overflow: hidden;
-      border-radius: 50%;
-      background: #d9a15d;
-      box-shadow: 0 24px 70px rgba(38, 37, 35, .28), 0 0 0 12px rgba(232, 121, 34, .08);
+      overflow: visible;
       will-change: transform, filter;
     }
     #cat-inner img {
@@ -59,9 +56,8 @@
       inset: 0;
       width: 100%;
       height: 100%;
-      object-fit: cover;
-      border-radius: 50%;
-      filter: saturate(1.06) contrast(1.04);
+      object-fit: contain;
+      filter: saturate(1.07) contrast(1.04) drop-shadow(0 24px 42px rgba(38, 37, 35, .28));
     }
     #cat-hiss { opacity: 0; transition: opacity .06s linear; }
     #cat-inner.is-hissing #cat-hiss { opacity: 1; }
@@ -147,7 +143,7 @@
       #credit { display: none; }
       .control { min-width: 42px; padding-inline: 9px; }
       .control span { display: none; }
-      #cat-inner { width: min(88vmin, 460px); }
+      #cat-inner { width: min(78vmin, 460px); }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
@@ -164,28 +160,30 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l10-2v13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="6" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="16" cy="16" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path class="slash" d="M4 3l16 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
           <span>音乐</span>
         </button>
-        <button id="sfx-toggle" class="control" type="button" aria-pressed="false" title="关闭哈气">
+        <button id="sfx-toggle" class="control" type="button" aria-pressed="false" title="关闭音效">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9v6h4l5 4V5L9 9H5zM17 9.5a4 4 0 010 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path class="slash" d="M4 3l16 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-          <span>哈气</span>
+          <span>音效</span>
         </button>
       </div>
-      <div id="credit">耄耋哈气版 · 本地哈气采样</div>
+      <div id="credit">耄耋绿幕版 · 哈基米九宫格</div>
     </div>
 
     <div id="flash"></div>
     <div id="cat" aria-hidden="true">
       <div id="cat-inner">
-        <img id="cat-normal" src="assets/maodie-calm-head.png" alt="">
-        <img id="cat-hiss" src="assets/maodie-hiss-head.png" alt="">
+        <img id="cat-normal" src="assets/maodie-greenscreen-calm.png" alt="">
+        <img id="cat-hiss" src="assets/maodie-greenscreen-hiss.png" alt="">
       </div>
     </div>
 
     <div id="overlay" role="button" tabindex="0" aria-label="点击开始">
-      <div class="title">耄耋<em>Tap</em></div>
-      <div class="hint">点击开始哈气</div>
+      <div class="title">哈基米<em>Tap</em></div>
+      <div class="hint">点击开始哈基米</div>
     </div>
   </div>
-  <audio id="hiss-sample" src="assets/maodie-haqi.mp4" preload="auto"></audio>
+  <audio id="sample-ha" src="assets/hakimi-ha.wav" preload="auto"></audio>
+  <audio id="sample-ji" src="assets/hakimi-ji.wav" preload="auto"></audio>
+  <audio id="sample-mi" src="assets/hakimi-mi.wav" preload="auto"></audio>
   <script src="main.js"></script>
 </body>
 </html>

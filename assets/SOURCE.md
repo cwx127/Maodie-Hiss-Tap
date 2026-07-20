@@ -1,26 +1,23 @@
 # 素材来源
 
-平静态来自一张公开动图：
+## 耄耋透明图片
 
-- 原图地址：<https://imggifb.gamersky.com/users/clubcontent/2025/05/29/origin_1913380_1349395.gif>
-- 来源页面：<https://club.gamersky.com/activity/1467155?club=1157>
-- 使用方式：提取第一帧作为平静态，再做等比例高质量放大；没有移除水印或修改原始画面内容。
+- 视频：<https://www.bilibili.com/video/BV1DtYKzPEHs/>
+- 标题：`【绿幕素材】耄耋的圆头.gb`
+- 作者：`不可燃物__`
+- 处理方式：从约 `17s` 的平静帧和约 `20s` 的张嘴帧截取原始画面，按绿色背景生成软透明蒙版、去除绿色溢色、收缩 1 像素边缘，再等比放大到 `1024×1024`。没有重绘猫脸。
 
-哈气态使用用户提供的正面张嘴图片：
+## 哈基米短采样
 
-- 使用方式：按页面竖版画框居中裁切并放大到 `720×954`，保留原始猫脸、獠牙和背景；没有去水印。
-- 页面使用的 `maodie-calm-head.png` 与 `maodie-hiss-head.png` 进一步按两张原图各自的头部中心裁成 `1024×1024` 圆形透明 PNG，没有重绘猫脸。
+- 视频：<https://www.bilibili.com/video/BV1QZgzzGEBK/>
+- 标题：`【素材】哈基米音乐素材合集`
+- 作者：`I隔壁小孩I`
+- 处理方式：只读取第一段素材，从约 `1.56s / 2.11s / 2.59s` 的三个起音附近分别截取 `哈 / 基 / 米`，输出为单声道 WAV，并加入很短的淡入淡出；运行时再通过 Web Audio 生成三档音高。
 
-原始页面没有明确的再分发许可。当前版本用于本地个人 Demo；如需公开部署或商业使用，请先获得原作者/页面运营方授权。
+## 交互参考
 
-哈气音频来源：
+- 官方玩具：<https://www.bilibili.com/toy/Dagou-Tap/index.html>
+- 开源项目：<https://github.com/MarkCup-Official/Dagou-Tap-New>
+- 参考内容：隐藏分区、张嘴图片叠放、点击弹簧放大和 `AudioBufferSourceNode.playbackRate` 变调思路；当前项目没有复制其代码或音频素材。
 
-- 视频：<https://www.bilibili.com/video/BV1gFtizTEGT/>
-- 标题：耄耋哈气纯享版
-- 处理方式：提取视频媒体流，并以浏览器可识别的 `.mp4` 扩展名保留在本地；每次交互读取片段开头约 `1.4` 秒，再按固定音阶变调播放，没有上传、发布或改编整段视频。
-- B 站页面标注“未经作者授权，禁止转载”，因此当前音频仅用于本地个人 Demo，不应直接公开分发。
-
-音阶交互参考：
-
-- 项目：<https://github.com/MarkCup-Official/Dagou-Tap-New>
-- 参考内容：固定分区、十二平均律半音倍率和 `AudioBufferSourceNode.playbackRate` 变调思路；当前项目没有复制其代码或音频素材。
+以上来源没有提供明确的再分发许可。当前版本仅用于私有仓库和本地个人 Demo；公开部署或商业使用前应取得原作者授权。

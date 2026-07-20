@@ -6,10 +6,8 @@ const S16 = SPB / 4;
 const S8 = SPB / 2;
 const MASTER_GAIN = 0.72;
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const HISS_PITCH_SEMITONES = Object.freeze([7, 4, 0, -3]);
-const HISS_PITCH_RATES = Object.freeze(HISS_PITCH_SEMITONES.map(semitones => Math.pow(2, semitones / 12)));
-const HISS_OFFSET = .06;
-const HISS_SOURCE_DURATION = 1.4;
+const VOICE_PITCH_SEMITONES = Object.freeze([5, 0, -5]);
+const VOICE_PITCH_RATES = Object.freeze(VOICE_PITCH_SEMITONES.map(semitones => Math.pow(2, semitones / 12)));
 
 const stage = document.getElementById('stage');
 const fxCanvas = document.getElementById('fx');
@@ -21,15 +19,19 @@ const topbar = document.getElementById('topbar');
 const flashLayer = document.getElementById('flash');
 const musicToggle = document.getElementById('music-toggle');
 const sfxToggle = document.getElementById('sfx-toggle');
-const hissSample = document.getElementById('hiss-sample');
+const sampleElements = Object.freeze({
+  ha: document.getElementById('sample-ha'),
+  ji: document.getElementById('sample-ji'),
+  mi: document.getElementById('sample-mi'),
+});
 
 let ctx = null;
 let master = null;
 let bgmBus = null;
 let sfxBus = null;
 let noiseBuffer = null;
-let hissBuffer = null;
-let hissBufferPromise = null;
+const voiceBuffers = {};
+let voiceBufferPromise = null;
 let started = false;
 let bgmMuted = false;
 let sfxMuted = false;
@@ -44,10 +46,12 @@ let controlsTimer = 0;
 let holding = false;
 let catBounce = 0;
 let catBounceVelocity = 0;
-let jelly = 1;
-let jellyVelocity = 0;
-const activeHissMedia = new Set();
-const activeHissSources = new Set();
+let jelly = 0;
+let hissActive = false;
+let hissPop = 0;
+let hissPopVelocity = 0;
+const activeVoiceMedia = new Set();
+const activeVoiceSources = new Set();
 
 const inputQueue = [];
 const inputTimers = new Set();
@@ -65,15 +69,11 @@ const colors = {
 };
 const accentColors = [colors.orange, colors.coral, colors.teal, colors.blue];
 const voiceNames = [
-  { key: 'haqi', label: '嘶' },
-  { key: 'haqi', label: '哈' },
-  { key: 'haqi', label: '气' },
+  { key: 'ha', label: '哈' },
+  { key: 'ji', label: '基' },
+  { key: 'mi', label: '米' },
 ];
-const toneHz = {
-  mao: [587.33, 659.25, 783.99, 880.00],
-  die: [392.00, 440.00, 523.25, 659.25],
-  haqi: [1250, 1650, 2150, 2750],
-};
+const fallbackHz = { ha: 261.63, ji: 329.63, mi: 392 };
 const chords = [
   { bass: 65.41, notes: [261.63, 329.63, 392.00] },
   { bass: 49.00, notes: [196.00, 246.94, 293.66] },
@@ -81,7 +81,7 @@ const chords = [
   { bass: 43.65, notes: [174.61, 220.00, 261.63] },
 ];
 
-let cols = 4;
+let cols = 3;
 let rows = 3;
 let zones = [];
 
@@ -110,24 +110,24 @@ function initAudio() {
   noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const samples = noiseBuffer.getChannelData(0);
   for (let i = 0; i < samples.length; i++) samples[i] = Math.random() * 2 - 1;
-  loadHissBuffer();
+  loadVoiceBuffers();
 }
 
-function loadHissBuffer() {
-  if (!ctx || hissBuffer || hissBufferPromise) return;
-  hissBufferPromise = fetch(hissSample.currentSrc || hissSample.src)
-    .then(response => {
-      if (!response.ok) throw new Error(`哈气采样加载失败：${response.status}`);
-      return response.arrayBuffer();
-    })
-    .then(data => ctx.decodeAudioData(data))
-    .then(buffer => {
-      hissBuffer = buffer;
-      stage.dataset.audioEngine = 'web-audio';
-    })
+function loadVoiceBuffers() {
+  if (!ctx || voiceBufferPromise) return;
+  voiceBufferPromise = Promise.all(Object.entries(sampleElements).map(([name, element]) =>
+    fetch(element.currentSrc || element.src)
+      .then(response => {
+        if (!response.ok) throw new Error(`${name} 采样加载失败：${response.status}`);
+        return response.arrayBuffer();
+      })
+      .then(data => ctx.decodeAudioData(data))
+      .then(buffer => { voiceBuffers[name] = buffer; })
+  ))
+    .then(() => { stage.dataset.audioEngine = 'web-audio'; })
     .catch(() => {
       stage.dataset.audioEngine = 'media-fallback';
-      hissBufferPromise = null;
+      voiceBufferPromise = null;
     });
 }
 
@@ -153,15 +153,16 @@ function toggleMusic() {
 function toggleSfx() {
   sfxMuted = !sfxMuted;
   setBusMuted(sfxBus, sfxMuted);
-  updateMuteButton(sfxToggle, sfxMuted, '哈气');
+  updateMuteButton(sfxToggle, sfxMuted, '音效');
   if (sfxMuted) {
     catInner.classList.remove('is-hissing');
-    for (const media of activeHissMedia) media.pause();
-    activeHissMedia.clear();
-    for (const source of activeHissSources) {
+    hissActive = false;
+    for (const media of activeVoiceMedia) media.pause();
+    activeVoiceMedia.clear();
+    for (const source of activeVoiceSources) {
       try { source.stop(); } catch (_) { /* 已经结束的音源无需再次停止 */ }
     }
-    activeHissSources.clear();
+    activeVoiceSources.clear();
   }
 }
 
@@ -263,71 +264,56 @@ function scheduler() {
   scheduleQueuedInputs(nowVisual() + .035);
 }
 
-function playSynthHiss(tier, t) {
-  const source = ctx.createBufferSource();
-  const highpass = ctx.createBiquadFilter();
-  const bandpass = ctx.createBiquadFilter();
-  const gain = ctx.createGain();
-  const duration = .24 + tier * .018;
-  source.buffer = noiseBuffer;
-  source.playbackRate.setValueAtTime(.82 + tier * .06, t);
-  highpass.type = 'highpass';
-  highpass.frequency.value = 720;
-  bandpass.type = 'bandpass';
-  bandpass.frequency.value = toneHz.haqi[tier];
-  bandpass.Q.value = .65;
-  gain.gain.setValueAtTime(.0001, t);
-  gain.gain.exponentialRampToValueAtTime(.34, t + .018);
-  gain.gain.exponentialRampToValueAtTime(.0001, t + duration);
-  source.connect(highpass);
-  highpass.connect(bandpass);
-  bandpass.connect(gain);
-  gain.connect(sfxBus);
-  source.start(t);
-  source.stop(t + duration + .03);
-  playOsc('sine', 125 + tier * 10, t, .12, .035, sfxBus, 80 + tier * 8);
+function playSynthVoice(sample, tier, t) {
+  const rate = VOICE_PITCH_RATES[tier] || 1;
+  const frequency = fallbackHz[sample] * rate;
+  playOsc('triangle', frequency, t, .28, .17, sfxBus, frequency * .88);
+  playOsc('sine', frequency * 2, t + .012, .2, .045, sfxBus, frequency * 1.6);
 }
 
-function playRecordedHiss(tier, t) {
-  const rate = HISS_PITCH_RATES[tier] || 1;
+function playRecordedVoice(sample, tier, t) {
+  const rate = VOICE_PITCH_RATES[tier] || 1;
+  const element = sampleElements[sample];
+  const buffer = voiceBuffers[sample];
+  stage.dataset.voice = sample;
   stage.dataset.pitchTier = String(tier);
   stage.dataset.pitchRate = rate.toFixed(6);
-  if (hissBuffer) {
+  if (buffer) {
     const source = ctx.createBufferSource();
     const gain = ctx.createGain();
-    const sourceDuration = Math.min(HISS_SOURCE_DURATION, Math.max(0, hissBuffer.duration - HISS_OFFSET));
-    source.buffer = hissBuffer;
+    source.buffer = buffer;
     source.playbackRate.setValueAtTime(rate, t);
-    gain.gain.setValueAtTime(.82, t);
+    gain.gain.setValueAtTime(.88, t);
     source.connect(gain);
     gain.connect(sfxBus);
-    source.onended = () => activeHissSources.delete(source);
-    activeHissSources.add(source);
-    source.start(t, HISS_OFFSET, sourceDuration);
+    source.onended = () => activeVoiceSources.delete(source);
+    activeVoiceSources.add(source);
+    source.start(t);
     return;
   }
 
   const delay = Math.max(0, (t - ctx.currentTime) * 1000);
   window.setTimeout(() => {
     if (sfxMuted) return;
-    const media = hissSample.cloneNode(true);
+    const media = element.cloneNode(true);
     media.volume = .9;
     media.preservesPitch = false;
     if ('webkitPreservesPitch' in media) media.webkitPreservesPitch = false;
     media.playbackRate = rate;
-    try { media.currentTime = HISS_OFFSET; } catch (_) { /* 元数据尚未就绪时从开头播放 */ }
-    activeHissMedia.add(media);
+    try { media.currentTime = 0; } catch (_) { /* 元数据尚未就绪时从开头播放 */ }
+    activeVoiceMedia.add(media);
     const stop = () => {
       media.pause();
-      activeHissMedia.delete(media);
+      activeVoiceMedia.delete(media);
       media.remove();
     };
-    window.setTimeout(stop, Math.ceil(HISS_SOURCE_DURATION / rate * 1000));
+    media.addEventListener('ended', stop, { once: true });
+    window.setTimeout(stop, Math.ceil(1400 / rate));
     const result = media.play();
     if (result && typeof result.catch === 'function') {
       result.catch(() => {
         stop();
-        playSynthHiss(tier, ctx.currentTime);
+        playSynthVoice(sample, tier, ctx.currentTime);
       });
     }
   }, delay);
@@ -335,23 +321,14 @@ function playRecordedHiss(tier, t) {
 
 function playVoice(sample, tier, t) {
   if (sfxMuted) return;
-  const frequency = toneHz[sample][tier];
-  if (sample === 'haqi') {
-    playRecordedHiss(tier, t);
-  } else if (sample === 'mao') {
-    playOsc('triangle', frequency, t, .26, .16, sfxBus, frequency * .74);
-    playOsc('sine', frequency * 2.01, t + .01, .2, .045, sfxBus, frequency * 1.52);
-  } else {
-    playOsc('triangle', frequency, t, .22, .14, sfxBus, frequency * 1.12);
-    playOsc('square', frequency * .5, t, .16, .032, sfxBus, frequency * .42);
-  }
+  playRecordedVoice(sample, tier, t);
 }
 
 function buildGrid() {
   const rect = stage.getBoundingClientRect();
   const landscape = rect.width >= rect.height;
-  cols = landscape ? 4 : 3;
-  rows = landscape ? 3 : 4;
+  cols = 3;
+  rows = 3;
   zones = [];
   if (landscape) {
     for (let row = 0; row < rows; row++) {
@@ -465,11 +442,16 @@ function visualAt(zone, when) {
   const timer = setTimeout(() => {
     inputTimers.delete(timer);
     if (!sfxMuted) {
+      hissActive = true;
       catInner.classList.add('is-hissing');
       clearTimeout(mouthTimer);
-      mouthTimer = setTimeout(() => catInner.classList.remove('is-hissing'), 520);
+      mouthTimer = setTimeout(() => {
+        hissActive = false;
+        catInner.classList.remove('is-hissing');
+      }, 460);
     }
     catBounceVelocity = Math.min(9, catBounceVelocity + 4.7);
+    hissPopVelocity = Math.min(9, hissPopVelocity + 5.2);
     spawnEffect(zone, nowVisual());
   }, delay);
   inputTimers.add(timer);
@@ -682,6 +664,16 @@ function updateCat(dt, now) {
   catBounceVelocity += (-catBounce) * 270 * dt;
   catBounceVelocity *= Math.exp(-14 * dt);
   catBounce += catBounceVelocity * dt;
+  if (REDUCED_MOTION) {
+    hissPop = hissActive ? 1 : 0;
+    hissPopVelocity = 0;
+  } else {
+    const popTarget = hissActive ? 1 : 0;
+    hissPopVelocity += (popTarget - hissPop) * 320 * dt;
+    hissPopVelocity *= Math.exp(-13 * dt);
+    hissPopVelocity = Math.max(-10, Math.min(10, hissPopVelocity));
+    hissPop += hissPopVelocity * dt;
+  }
   const holdTarget = pointers.size ? 1 : 0;
   jelly += (holdTarget - jelly) * (1 - Math.exp(-dt / (pointers.size ? .8 : .18)));
   const x = REDUCED_MOTION ? 0 : sway * 3.5;
@@ -689,7 +681,9 @@ function updateCat(dt, now) {
   cat.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${(sway * 1.6).toFixed(2)}deg) scale(${(1 + beatPulse * .045).toFixed(4)}, ${(1 - beatPulse * .032).toFixed(4)})`;
   const jx = REDUCED_MOTION ? 0 : Math.sin(now * 124) * pointers.size * 2.2 * jelly;
   const jy = REDUCED_MOTION ? 0 : Math.cos(now * 137) * pointers.size * 1.8 * jelly;
-  catInner.style.transform = `translate(${jx.toFixed(2)}px, ${jy.toFixed(2)}px) scale(${(1 + .08 * (jelly - 1)).toFixed(4)})`;
+  const popScale = 1 + .22 * hissPop;
+  const holdScale = 1 + .1 * jelly;
+  catInner.style.transform = `translate(${jx.toFixed(2)}px, ${jy.toFixed(2)}px) rotate(${(-3.5 * hissPop).toFixed(2)}deg) scale(${(popScale * holdScale).toFixed(4)})`;
   catInner.style.filter = pointers.size ? `hue-rotate(${(-12 * jelly).toFixed(1)}deg) saturate(${(1 + .25 * jelly).toFixed(2)})` : '';
 }
 
@@ -794,5 +788,5 @@ window.addEventListener('resize', () => { resizeCanvas(); buildGrid(); });
 buildGrid();
 resizeCanvas();
 updateMuteButton(musicToggle, false, '音乐');
-updateMuteButton(sfxToggle, false, '哈气');
+updateMuteButton(sfxToggle, false, '音效');
 requestAnimationFrame(frame);
