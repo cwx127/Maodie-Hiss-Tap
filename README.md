@@ -85,6 +85,8 @@ playbackRate = 2^(半音偏移 / 12)
 
 ## 音频流程
 
+当前版本使用 [BV1gru3z4EHi](https://www.bilibili.com/video/BV1gru3z4EHi/) 中单独试听的 `哈1.wav`、`基1.wav` 和 `米1.wav`。三个文件在源素材里已经分开，因此页面不会再把连续的“哈基米”唱词误当成某一个按键音效。
+
 1. 页面加载时预取 `hakimi-ha.wav`、`hakimi-ji.wav` 和 `hakimi-mi.wav`。
 2. 首次交互创建并解锁 `AudioContext`。
 3. 三段采样解码成 `AudioBuffer`，按九宫格档位设置播放倍率。
